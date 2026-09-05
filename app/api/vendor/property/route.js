@@ -39,21 +39,25 @@ export async function GET() {
       });
     }
 
-    let service = await Service.findOne({ property_id: property._id });
-    if (!service) {
-      service = await Service.create({
+    // Fetch all services belonging to this property
+    let services = await Service.find({ property_id: property._id });
+    
+    // Auto-create at least one service if none exist
+    if (services.length === 0) {
+      const newService = await Service.create({
         property_id: property._id,
         category: 'Hostel',
         pricing: { starting_price: 5000, price_unit: 'month' },
         dynamic_attributes: { amenities: ['AC', 'Wi-Fi'] }
       });
+      services = [newService];
     }
 
     return NextResponse.json({
       success: true,
       data: {
         property,
-        service
+        services
       }
     });
   } catch (error) {
@@ -71,35 +75,74 @@ export async function PATCH(request) {
 
     const updates = await request.json();
     
-    // Validate we have a property
+    // Validate we have a property for this vendor
     const property = await Property.findOne({ vendor_id: vendor._id });
     if (!property) {
       return NextResponse.json({ error: 'Property not found' }, { status: 404 });
     }
 
-    // Update Property details (e.g. name)
-    if (updates.property_name) {
+    // Update Property details (e.g. name, images)
+    if (updates.property_name !== undefined) {
       property.property_name = updates.property_name;
-      // Note: intentionally NOT allowing updates to 'status' or verification badges
-      await property.save();
     }
+    if (updates.thumbnail_url !== undefined) {
+      property.thumbnail_url = updates.thumbnail_url;
+    }
+    if (updates.gallery_urls !== undefined) {
+      property.gallery_urls = updates.gallery_urls;
+    }
+    // Note: intentionally NOT allowing updates to 'status' or verification badges
+    await property.save();
 
-    // Update Service details (e.g. rent, amenities)
-    const service = await Service.findOne({ property_id: property._id });
-    if (service) {
-      if (updates.pricing) {
-        service.pricing = { ...service.pricing, ...updates.pricing };
+    // Synchronize Services if an array is provided and valid
+    if (updates.services && Array.isArray(updates.services)) {
+      const existingServices = await Service.find({ property_id: property._id });
+      const existingIds = existingServices.map(s => s._id.toString());
+      
+      const incomingServices = updates.services;
+      const incomingIds = incomingServices.map(s => s._id).filter(id => id);
+
+      // Validate no duplicate categories in incoming payload
+      const categorySet = new Set();
+      for (const s of incomingServices) {
+        if (!s.category) continue;
+        if (categorySet.has(s.category)) {
+          return NextResponse.json({ error: `Duplicate service category not allowed: ${s.category}` }, { status: 400 });
+        }
+        categorySet.add(s.category);
       }
-      if (updates.amenities) {
-        service.dynamic_attributes = { 
-          ...service.dynamic_attributes, 
-          amenities: updates.amenities 
+
+      // Delete removed services securely
+      const idsToDelete = existingIds.filter(id => !incomingIds.includes(id));
+      if (idsToDelete.length > 0) {
+        await Service.deleteMany({ _id: { $in: idsToDelete }, property_id: property._id });
+      }
+
+      // Update existing or Create new services
+      for (const incomingService of incomingServices) {
+        if (!incomingService.category) continue; // Category is required
+
+        // Ensure proper typed nested structures for dynamic_attributes
+        const servicePayload = {
+          category: incomingService.category,
+          pricing: incomingService.pricing || {},
+          dynamic_attributes: incomingService.dynamic_attributes || {}
         };
+
+        if (incomingService._id && existingIds.includes(incomingService._id)) {
+          // Update existing service
+          await Service.findOneAndUpdate(
+            { _id: incomingService._id, property_id: property._id }, // Strict authorization check
+            { $set: servicePayload }
+          );
+        } else {
+          // Create new service
+          await Service.create({
+            property_id: property._id,
+            ...servicePayload
+          });
+        }
       }
-      if (updates.category) {
-        service.category = updates.category;
-      }
-      await service.save();
     }
 
     return NextResponse.json({ success: true, message: 'Updated successfully' });
