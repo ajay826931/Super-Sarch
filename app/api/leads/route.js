@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import User from '@/models/User';
 import Lead from '@/models/Lead';
+import Property from '@/models/Property';
 
 export async function POST(request) {
   try {
     await dbConnect();
-    const { studentName, whatsappNumber, targetExam, propertyId } = await request.json();
+    const { studentName, whatsappNumber, servicesWanted, studentLocation, propertyId } = await request.json();
 
     if (!whatsappNumber || !studentName || !propertyId) {
       return NextResponse.json(
@@ -28,9 +29,36 @@ export async function POST(request) {
     const lead = await Lead.create({
       user_id: user._id,
       property_id: propertyId,
-      target_exam: targetExam || 'Other',
+      services_wanted: servicesWanted || [],
+      student_location: studentLocation || '',
       status: 'New'
     });
+
+    // Google Sheets Webhook
+    try {
+      const property = await Property.findById(propertyId).select('property_name title');
+      const propertyName = property ? (property.property_name || property.title) : 'Unknown Property';
+      const webhookUrl = process.env.GOOGLE_SHEET_WEBHOOK_URL;
+      
+      if (webhookUrl) {
+        await fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            Date: new Date().toISOString(),
+            StudentName: studentName,
+            WhatsAppNumber: whatsappNumber,
+            ServicesWanted: Array.isArray(servicesWanted) ? servicesWanted.join(', ') : '',
+            StudentLocation: studentLocation || '',
+            PropertyName: propertyName,
+            PropertyID: propertyId
+          })
+        });
+      }
+    } catch (sheetError) {
+      console.error('Google Sheet Webhook Error:', sheetError);
+      // Fails silently for the user
+    }
 
     return NextResponse.json({ success: true, leadId: lead._id });
   } catch (error) {

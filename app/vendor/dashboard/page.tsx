@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Save, Building, ShieldCheck, UploadCloud, X, Image as ImageIcon, Plus, Edit2, Trash2 } from "lucide-react";
+import { Loader2, Save, Building, ShieldCheck, UploadCloud, X, Image as ImageIcon, Plus, Edit2, Trash2, MapPin } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { compressImage } from "@/lib/imageUtils";
+import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 
 const amenitySchemas: Record<string, string[]> = {
   Hostel: ["AC", "Non-AC", "Attached Washroom", "Wi-Fi", "Study Table", "Almirah", "Security", "Laundry", "Food Availability"],
@@ -19,7 +20,17 @@ export default function VendorDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string
+  });
+  
+  // separate uploading states
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [uploadingServiceIdx, setUploadingServiceIdx] = useState<number | null>(null);
+
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -42,8 +53,10 @@ export default function VendorDashboard() {
       if (json.success) {
         setData({
           propertyName: json.data.property.property_name || "",
-          thumbnailUrl: json.data.property.thumbnail_url || "",
-          galleryUrls: json.data.property.gallery_urls || [],
+          address: json.data.property.address || "",
+          coordinates: json.data.property.location?.coordinates || [75.8323, 25.1815],
+          businessLogo: json.data.property.business_logo || "",
+          coverPhoto: json.data.property.cover_photo || "",
           services: json.data.services || [],
         });
       } else {
@@ -56,68 +69,101 @@ export default function VendorDashboard() {
     }
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const uploadSingleImage = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error("File exceeds 5MB limit");
+    }
+    const compressedFile = await compressImage(file);
+    const formData = new FormData();
+    formData.append("file", compressedFile);
+
+    const res = await fetch("/api/vendor/upload", {
+      method: "POST",
+      body: formData,
+    });
+    const uploadData = await res.json();
+    if (uploadData.success) {
+      return uploadData.url;
+    }
+    throw new Error("Upload failed");
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploadingLogo(true);
+    setError("");
+    try {
+      const url = await uploadSingleImage(files[0]);
+      setData({ ...data, businessLogo: url });
+    } catch (err: any) {
+      setError(err.message || "Failed to upload logo");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploadingCover(true);
+    setError("");
+    try {
+      const url = await uploadSingleImage(files[0]);
+      setData({ ...data, coverPhoto: url });
+    } catch (err: any) {
+      setError(err.message || "Failed to upload cover photo");
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+
+  const handleServiceImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, serviceIndex: number) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    if (data.galleryUrls.length + files.length > 30) {
-      setError("Maximum 30 images allowed per property.");
+    const service = data.services[serviceIndex];
+    const category = service.category;
+    const limit = category === 'Hostel' ? 8 : 5;
+    const currentImages = service.service_images || [];
+
+    if (currentImages.length + files.length > limit) {
+      setError(`Maximum ${limit} images allowed for ${category} service.`);
       return;
     }
 
-    setUploading(true);
+    setUploadingServiceIdx(serviceIndex);
     setError("");
     
-    let newGallery = [...data.galleryUrls];
-    let newThumbnail = data.thumbnailUrl;
+    let newImages = [...currentImages];
     let failedUploads: string[] = [];
-    let sizeErrors: string[] = [];
 
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        
-        if (file.size > 5 * 1024 * 1024) {
-          sizeErrors.push(file.name);
-          continue;
-        }
-
-        const compressedFile = await compressImage(file);
-        const formData = new FormData();
-        formData.append("file", compressedFile);
-
-        const res = await fetch("/api/vendor/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        const uploadData = await res.json();
-        if (uploadData.success) {
-          newGallery.push(uploadData.url);
-          if (!newThumbnail) {
-            newThumbnail = uploadData.url;
-          }
-        } else {
+        try {
+          const url = await uploadSingleImage(file);
+          newImages.push(url);
+        } catch (err) {
           failedUploads.push(file.name);
         }
       }
 
-      setData({ ...data, galleryUrls: newGallery, thumbnailUrl: newThumbnail });
+      const updatedServices = [...data.services];
+      updatedServices[serviceIndex] = { ...service, service_images: newImages };
+      setData({ ...data, services: updatedServices });
       
-      let errorMessage = "";
-      if (sizeErrors.length > 0) errorMessage += `Files larger than 5MB skipped: ${sizeErrors.join(", ")}. `;
-      if (failedUploads.length > 0) errorMessage += `Failed to upload: ${failedUploads.join(", ")}.`;
-      if (errorMessage) setError(errorMessage.trim());
+      if (failedUploads.length > 0) setError(`Failed to upload: ${failedUploads.join(", ")}`);
     } catch (err) {
       console.error(err);
-      setError("Error uploading images. Please try again.");
+      setError("Error uploading service images.");
     } finally {
-      setUploading(false);
+      setUploadingServiceIdx(null);
       if (e.target) e.target.value = '';
     }
   };
 
-  const removeImage = async (urlToRemove: string) => {
+  const removeServiceImage = async (serviceIndex: number, urlToRemove: string) => {
     try {
       await fetch("/api/vendor/upload", {
         method: "DELETE",
@@ -128,16 +174,11 @@ export default function VendorDashboard() {
       console.error("Failed to delete from Cloudinary", e);
     }
 
-    const updatedGallery = data.galleryUrls.filter((url: string) => url !== urlToRemove);
-    let updatedThumbnail = data.thumbnailUrl;
-    if (updatedThumbnail === urlToRemove) {
-      updatedThumbnail = updatedGallery.length > 0 ? updatedGallery[0] : "";
-    }
-    setData({ ...data, galleryUrls: updatedGallery, thumbnailUrl: updatedThumbnail });
-  };
-
-  const setAsThumbnail = (url: string) => {
-    setData({ ...data, thumbnailUrl: url });
+    const service = data.services[serviceIndex];
+    const updatedImages = (service.service_images || []).filter((url: string) => url !== urlToRemove);
+    const updatedServices = [...data.services];
+    updatedServices[serviceIndex] = { ...service, service_images: updatedImages };
+    setData({ ...data, services: updatedServices });
   };
 
   const handleSaveProperty = async () => {
@@ -151,8 +192,10 @@ export default function VendorDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           property_name: data.propertyName,
-          thumbnail_url: data.thumbnailUrl,
-          gallery_urls: data.galleryUrls,
+          address: data.address,
+          coordinates: data.coordinates,
+          business_logo: data.businessLogo,
+          cover_photo: data.coverPhoto,
           services: data.services
         })
       });
@@ -177,6 +220,7 @@ export default function VendorDashboard() {
       category: "Hostel",
       pricing: { starting_price: "", price_unit: "month" },
       dynamic_attributes: { amenities: [] },
+      service_images: [],
       isNew: true,
       index: data.services.length
     });
@@ -206,10 +250,11 @@ export default function VendorDashboard() {
 
     const updatedServices = [...data.services];
     const servicePayload = {
-      _id: editingService._id, // Will be undefined if new, which is fine
+      _id: editingService._id,
       category: editingService.category,
       pricing: editingService.pricing,
-      dynamic_attributes: editingService.dynamic_attributes
+      dynamic_attributes: editingService.dynamic_attributes,
+      service_images: editingService.service_images || []
     };
 
     if (editingService.isNew) {
@@ -255,7 +300,7 @@ export default function VendorDashboard() {
       {success && <div className="bg-green-50 text-green-600 p-3 rounded-lg mb-6">{success}</div>}
 
       {/* --- PROPERTY LEVEL INFO --- */}
-      <div className="space-y-6">
+      <div className="space-y-8">
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-2">Property Name</label>
           <Input 
@@ -267,71 +312,114 @@ export default function VendorDashboard() {
           />
         </div>
 
-        {/* Image Upload Zone */}
-        <div className="mt-8 border-t pt-8">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h3 className="text-lg font-bold text-gray-900">Property Images</h3>
-              <p className="text-sm text-gray-500">Upload up to 30 images (Max 5MB each). Images are compressed automatically.</p>
-            </div>
-            <div className="relative">
-              <input 
-                type="file" 
-                multiple 
-                accept="image/*" 
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-                onChange={handleImageUpload}
-                disabled={uploading}
-              />
-              <Button type="button" variant="outline" disabled={uploading}>
-                {uploading ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Readable Address</label>
+            <Input 
+              required
+              value={data.address}
+              onChange={(e) => setData({...data, address: e.target.value})}
+              placeholder="e.g. A-12, Jawahar Nagar, Kota"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Pin Your Exact Location</label>
+            <p className="text-sm text-gray-500 mb-4">Drag the marker to your exact location so students can find you easily.</p>
+            {isLoaded ? (
+              <div className="h-[300px] w-full rounded-lg overflow-hidden border border-gray-200">
+                <GoogleMap
+                  mapContainerStyle={{ width: '100%', height: '100%' }}
+                  center={{ lat: data.coordinates[1], lng: data.coordinates[0] }}
+                  zoom={15}
+                  onClick={(e) => {
+                    if (e.latLng) {
+                      setData({ ...data, coordinates: [e.latLng.lng(), e.latLng.lat()] });
+                    }
+                  }}
+                  options={{
+                    disableDefaultUI: true,
+                    zoomControl: true,
+                  }}
+                >
+                  <Marker
+                    position={{ lat: data.coordinates[1], lng: data.coordinates[0] }}
+                    draggable={true}
+                    onDragEnd={(e) => {
+                      if (e.latLng) {
+                        setData({ ...data, coordinates: [e.latLng.lng(), e.latLng.lat()] });
+                      }
+                    }}
+                  />
+                </GoogleMap>
+              </div>
+            ) : (
+              <div className="h-[300px] w-full rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-gray-300" />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 border-t">
+          {/* Business Logo Upload */}
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Business Logo</h3>
+            <p className="text-sm text-gray-500 mb-4">Upload a square logo (Max 5MB).</p>
+            
+            <div className="flex items-center gap-4">
+              <div className="h-20 w-20 rounded-full border-2 border-dashed flex items-center justify-center bg-gray-50 overflow-hidden">
+                {data.businessLogo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={data.businessLogo} alt="Logo" className="h-full w-full object-cover" />
                 ) : (
-                  <UploadCloud className="h-4 w-4 mr-2 text-primary" />
+                  <Building className="h-8 w-8 text-gray-300" />
                 )}
-                {uploading ? "Uploading..." : "Select Images"}
-              </Button>
+              </div>
+              <div className="relative">
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                  onChange={handleLogoUpload}
+                  disabled={uploadingLogo}
+                />
+                <Button type="button" variant="outline" disabled={uploadingLogo}>
+                  {uploadingLogo ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UploadCloud className="h-4 w-4 mr-2 text-primary" />}
+                  {uploadingLogo ? "Uploading..." : "Upload Logo"}
+                </Button>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {data.galleryUrls.map((url: string, index: number) => (
-              <div key={index} className={`relative group rounded-lg overflow-hidden border-2 ${data.thumbnailUrl === url ? 'border-primary' : 'border-transparent'}`}>
-                <img src={url} alt="Property" className="w-full h-24 object-cover" />
-                
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
-                  <button 
-                    type="button"
-                    onClick={() => removeImage(url)}
-                    className="self-end bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                  
-                  {data.thumbnailUrl !== url && (
-                    <button 
-                      type="button"
-                      onClick={() => setAsThumbnail(url)}
-                      className="text-xs bg-white text-gray-900 px-2 py-1 rounded-md font-semibold hover:bg-gray-100"
-                    >
-                      Set Thumbnail
-                    </button>
-                  )}
-                </div>
-                
-                {data.thumbnailUrl === url && (
-                  <div className="absolute top-2 left-2 bg-primary text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    Cover
-                  </div>
+          {/* Cover Photo Upload */}
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Cover Photo</h3>
+            <p className="text-sm text-gray-500 mb-4">Upload main hero image for search tile (Max 5MB).</p>
+            
+            <div className="flex items-center gap-4">
+              <div className="h-20 w-32 rounded-lg border-2 border-dashed flex items-center justify-center bg-gray-50 overflow-hidden">
+                {data.coverPhoto ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={data.coverPhoto} alt="Cover" className="h-full w-full object-cover" />
+                ) : (
+                  <ImageIcon className="h-8 w-8 text-gray-300" />
                 )}
               </div>
-            ))}
-            {data.galleryUrls.length === 0 && !uploading && (
-              <div className="col-span-full py-12 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-gray-400">
-                <ImageIcon className="h-12 w-12 mb-3 text-gray-300" />
-                <p>No images uploaded yet.</p>
+              <div className="relative">
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                  onChange={handleCoverUpload}
+                  disabled={uploadingCover}
+                />
+                <Button type="button" variant="outline" disabled={uploadingCover}>
+                  {uploadingCover ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <UploadCloud className="h-4 w-4 mr-2 text-primary" />}
+                  {uploadingCover ? "Uploading..." : "Upload Cover"}
+                </Button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
@@ -339,7 +427,10 @@ export default function VendorDashboard() {
       {/* --- SERVICES MULTI-SECTION --- */}
       <div className="mt-12 border-t pt-8">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900">Services Offered</h2>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Services Offered</h2>
+            <p className="text-sm text-gray-500">Add services and manage their respective photo galleries here.</p>
+          </div>
           {!editingService && (
             <Button onClick={startAddService} variant="outline" size="sm">
               <Plus className="h-4 w-4 mr-2" /> Add Service
@@ -349,9 +440,13 @@ export default function VendorDashboard() {
 
         {/* Existing Services List */}
         {!editingService && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-            {data.services.map((svc: any, idx: number) => (
-              <div key={idx} className="bg-gray-50 border rounded-xl p-5 relative group">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {data.services.map((svc: any, idx: number) => {
+              const categoryLimit = svc.category === 'Hostel' ? 8 : 5;
+              const images = svc.service_images || [];
+              const isUploadingThis = uploadingServiceIdx === idx;
+              return (
+              <div key={idx} className="bg-gray-50 border rounded-xl p-5 relative">
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="font-bold text-lg text-primary">{svc.category}</h3>
                   <div className="flex space-x-2">
@@ -366,20 +461,50 @@ export default function VendorDashboard() {
                 <div className="text-xl font-extrabold text-gray-900 mb-4">
                   ₹{svc.pricing?.starting_price} <span className="text-sm text-gray-500 font-medium">/ {svc.pricing?.price_unit || "month"}</span>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {(svc.dynamic_attributes?.amenities || []).slice(0, 4).map((amenity: string, aIdx: number) => (
-                    <span key={aIdx} className="text-xs bg-white border px-2 py-1 rounded-full text-gray-600">
-                      {amenity}
-                    </span>
-                  ))}
-                  {(svc.dynamic_attributes?.amenities?.length || 0) > 4 && (
-                    <span className="text-xs bg-gray-200 border px-2 py-1 rounded-full text-gray-600">
-                      +{(svc.dynamic_attributes.amenities.length - 4)} more
-                    </span>
-                  )}
+                
+                {/* Embedded Service Image Gallery */}
+                <div className="mt-4 pt-4 border-t">
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="font-semibold text-sm text-gray-700">Gallery ({images.length}/{categoryLimit})</span>
+                    <div className="relative">
+                      <input 
+                        type="file" 
+                        multiple 
+                        accept="image/*" 
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                        onChange={(e) => handleServiceImageUpload(e, idx)}
+                        disabled={isUploadingThis || images.length >= categoryLimit}
+                      />
+                      <Button type="button" variant="outline" size="sm" disabled={isUploadingThis || images.length >= categoryLimit}>
+                        {isUploadingThis ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Plus className="h-3 w-3 mr-1" />}
+                        Add Photos
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-2">
+                    {images.map((url: string, imgIdx: number) => (
+                      <div key={imgIdx} className="relative group rounded overflow-hidden border w-16 h-16">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt={`${svc.category} img`} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <button 
+                            type="button"
+                            onClick={() => removeServiceImage(idx, url)}
+                            className="bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {images.length === 0 && !isUploadingThis && (
+                      <div className="w-full text-xs text-gray-400 italic py-2">No photos added to this service.</div>
+                    )}
+                  </div>
                 </div>
               </div>
-            ))}
+            )})}
             {data.services.length === 0 && (
               <div className="col-span-full py-8 text-center text-gray-500 border-2 border-dashed rounded-xl">
                 No services added yet. Click "Add Service" to start.
@@ -393,7 +518,7 @@ export default function VendorDashboard() {
           <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-6 mb-6">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-bold text-gray-900">
-                {editingService.isNew ? "Add New Service" : "Edit Service"}
+                {editingService.isNew ? "Add New Service" : "Edit Service Details"}
               </h3>
               <Button variant="ghost" size="sm" onClick={() => setEditingService(null)}>
                 Cancel

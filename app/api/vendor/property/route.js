@@ -27,7 +27,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    let property = await Property.findOne({ vendor_id: vendor._id });
+    let property = await Property.findOne({ vendor_id: vendor._id }).select('property_name address location business_logo cover_photo thumbnail_url gallery_urls status');
     
     // Auto-create for testing if it doesn't exist
     if (!property) {
@@ -40,7 +40,7 @@ export async function GET() {
     }
 
     // Fetch all services belonging to this property
-    let services = await Service.find({ property_id: property._id });
+    let services = await Service.find({ property_id: property._id }).select('category pricing dynamic_attributes service_images');
     
     // Auto-create at least one service if none exist
     if (services.length === 0) {
@@ -48,7 +48,8 @@ export async function GET() {
         property_id: property._id,
         category: 'Hostel',
         pricing: { starting_price: 5000, price_unit: 'month' },
-        dynamic_attributes: { amenities: ['AC', 'Wi-Fi'] }
+        dynamic_attributes: { amenities: ['AC', 'Wi-Fi'] },
+        service_images: []
       });
       services = [newService];
     }
@@ -74,6 +75,7 @@ export async function PATCH(request) {
     }
 
     const updates = await request.json();
+    console.log("PATCH /api/vendor/property Payload:", updates);
     
     // Validate we have a property for this vendor
     const property = await Property.findOne({ vendor_id: vendor._id });
@@ -81,9 +83,23 @@ export async function PATCH(request) {
       return NextResponse.json({ error: 'Property not found' }, { status: 404 });
     }
 
-    // Update Property details (e.g. name, images)
     if (updates.property_name !== undefined) {
       property.property_name = updates.property_name;
+    }
+    if (updates.address !== undefined) {
+      property.address = updates.address;
+    }
+    if (updates.coordinates !== undefined && Array.isArray(updates.coordinates) && updates.coordinates.length === 2) {
+      property.location = {
+        type: 'Point',
+        coordinates: updates.coordinates // [lng, lat]
+      };
+    }
+    if (updates.business_logo !== undefined) {
+      property.business_logo = updates.business_logo;
+    }
+    if (updates.cover_photo !== undefined) {
+      property.cover_photo = updates.cover_photo;
     }
     if (updates.thumbnail_url !== undefined) {
       property.thumbnail_url = updates.thumbnail_url;
@@ -126,14 +142,16 @@ export async function PATCH(request) {
         const servicePayload = {
           category: incomingService.category,
           pricing: incomingService.pricing || {},
-          dynamic_attributes: incomingService.dynamic_attributes || {}
+          dynamic_attributes: incomingService.dynamic_attributes || {},
+          service_images: incomingService.service_images || []
         };
 
         if (incomingService._id && existingIds.includes(incomingService._id)) {
           // Update existing service
           await Service.findOneAndUpdate(
             { _id: incomingService._id, property_id: property._id }, // Strict authorization check
-            { $set: servicePayload }
+            { $set: servicePayload },
+            { new: true }
           );
         } else {
           // Create new service

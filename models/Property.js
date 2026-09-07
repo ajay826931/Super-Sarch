@@ -9,6 +9,8 @@ const PropertySchema = new mongoose.Schema({
     coordinates: { type: [Number], required: true } // [longitude, latitude]
   },
   location_version: { type: Number, default: 1 },
+  business_logo: { type: String },
+  cover_photo: { type: String },
   thumbnail_url: { type: String },
   gallery_urls: {
     type: [String],

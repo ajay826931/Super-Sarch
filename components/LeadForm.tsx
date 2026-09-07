@@ -1,23 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Phone, CheckCircle2 } from "lucide-react";
 
 interface LeadFormProps {
   propertyId: string;
+  availableServices: string[];
 }
 
-export default function LeadForm({ propertyId }: LeadFormProps) {
+export default function LeadForm({ propertyId, availableServices }: LeadFormProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [exam, setExam] = useState("");
+  const [location, setLocation] = useState("");
+  const [servicesWanted, setServicesWanted] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  const toggleService = (service: string) => {
+    setServicesWanted(prev => 
+      prev.includes(service) ? prev.filter(s => s !== service) : [...prev, service]
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +37,8 @@ export default function LeadForm({ propertyId }: LeadFormProps) {
         body: JSON.stringify({
           studentName: name,
           whatsappNumber: phone,
-          targetExam: exam,
+          studentLocation: location,
+          servicesWanted: servicesWanted,
           propertyId
         })
       });
@@ -42,7 +50,8 @@ export default function LeadForm({ propertyId }: LeadFormProps) {
           setSuccess(false);
           setName("");
           setPhone("");
-          setExam("");
+          setLocation("");
+          setServicesWanted([]);
         }, 3000);
       } else {
         alert("Something went wrong. Please try again.");
@@ -100,21 +109,38 @@ export default function LeadForm({ propertyId }: LeadFormProps) {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Target Exam</label>
-                <Select required value={exam} onValueChange={setExam}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select Exam" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NEET">NEET</SelectItem>
-                    <SelectItem value="JEE">JEE</SelectItem>
-                    <SelectItem value="Foundation">Foundation</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Your Location (City/Area)</label>
+                <Input 
+                  required 
+                  placeholder="e.g. Rajiv Gandhi Nagar" 
+                  value={location} 
+                  onChange={(e) => setLocation(e.target.value)} 
+                />
               </div>
+
+              {availableServices.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Services You Want</label>
+                  <div className="flex flex-wrap gap-2">
+                    {availableServices.map(service => (
+                      <button
+                        key={service}
+                        type="button"
+                        onClick={() => toggleService(service)}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors border ${
+                          servicesWanted.includes(service)
+                            ? 'bg-primary border-primary text-primary-foreground'
+                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {service}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               
-              <Button type="submit" disabled={loading} className="w-full h-12 text-lg font-bold mt-2">
+              <Button type="submit" disabled={loading} className="w-full h-12 text-lg font-bold mt-4">
                 {loading ? "Submitting..." : "Request Callback"}
               </Button>
             </form>

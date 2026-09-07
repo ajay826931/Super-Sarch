@@ -7,7 +7,8 @@ const ServiceSchema = new mongoose.Schema({
     starting_price: { type: Number },
     price_unit: { type: String }
   },
-  dynamic_attributes: { type: mongoose.Schema.Types.Mixed }
+  dynamic_attributes: { type: mongoose.Schema.Types.Mixed },
+  service_images: { type: [String] }
 }, { timestamps: true });
 
 export default mongoose.models.Service || mongoose.model('Service', ServiceSchema);
