@@ -5,6 +5,8 @@ import Vendor from '@/models/Vendor';
 import Property from '@/models/Property';
 import Service from '@/models/Service';
 
+import { verifyVendorToken } from '@/lib/jwt';
+
 // Authentication middleware helper
 async function getAuthenticatedVendor() {
   const cookieStore = await cookies();
@@ -13,6 +15,14 @@ async function getAuthenticatedVendor() {
   
   await dbConnect();
   try {
+    // 1. Try decoding as JWT
+    const decoded = verifyVendorToken(token);
+    if (decoded && decoded.vendorId) {
+      const vendor = await Vendor.findById(decoded.vendorId);
+      return vendor;
+    }
+
+    // 2. Fallback to raw MongoDB ObjectId for legacy sessions
     const vendor = await Vendor.findById(token);
     return vendor;
   } catch (err) {

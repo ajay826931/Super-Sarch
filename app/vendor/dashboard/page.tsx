@@ -3,10 +3,21 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Save, Building, ShieldCheck, UploadCloud, X, Image as ImageIcon, Plus, Edit2, Trash2, MapPin } from "lucide-react";
+import { Loader2, Save, Building, ShieldCheck, UploadCloud, X, Image as ImageIcon, Plus, Edit2, Trash2, MapPin, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { compressImage } from "@/lib/imageUtils";
-import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+// Google Maps imports (Temporarily bypassed for MVP - kept for future use):
+// import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+import dynamic from "next/dynamic";
+
+const LeafletMap = dynamic(() => import("@/components/LeafletMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[300px] w-full rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-gray-300" />
+    </div>
+  ),
+});
 
 const amenitySchemas: Record<string, string[]> = {
   Hostel: ["AC", "Non-AC", "Attached Washroom", "Wi-Fi", "Study Table", "Almirah", "Security", "Laundry", "Food Availability"],
@@ -21,10 +32,13 @@ export default function VendorDashboard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
+  // Google Maps loader (Temporarily bypassed for MVP):
+  /*
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string
   });
+  */
   
   // separate uploading states
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -284,15 +298,38 @@ export default function VendorDashboard() {
 
   if (!data) return <div>Failed to load your property data.</div>;
 
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/vendor/auth/logout", { method: "POST" });
+    } catch (e) {
+      console.error(e);
+    }
+    router.push("/vendor/login");
+  };
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8 mb-20">
-      <div className="flex items-center mb-6 border-b pb-4">
-        <Building className="h-6 w-6 text-primary mr-3" />
-        <h1 className="text-2xl font-bold text-gray-900">Manage Property</h1>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6 border-b pb-4">
+        <div className="flex items-center">
+          <Building className="h-6 w-6 text-primary mr-3" />
+          <h1 className="text-2xl font-bold text-gray-900">Manage Property</h1>
+        </div>
         
-        <div className="ml-auto flex items-center bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
-          <ShieldCheck className="h-4 w-4 mr-1" />
-          KHM Verified
+        <div className="flex items-center gap-3">
+          <div className="flex items-center bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
+            <ShieldCheck className="h-4 w-4 mr-1" />
+            KHM Verified
+          </div>
+          <Button 
+            type="button" 
+            variant="outline" 
+            size="sm" 
+            onClick={handleLogout} 
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+          >
+            <LogOut className="h-4 w-4 mr-1.5" />
+            Logout
+          </Button>
         </div>
       </div>
 
@@ -326,6 +363,16 @@ export default function VendorDashboard() {
           <div className="md:col-span-2">
             <label className="block text-sm font-semibold text-gray-700 mb-2">Pin Your Exact Location</label>
             <p className="text-sm text-gray-500 mb-4">Drag the marker to your exact location so students can find you easily.</p>
+            {/* OpenStreetMap + Leaflet Map (100% Free Open-Source) */}
+            <LeafletMap
+              lat={data.coordinates[1]}
+              lng={data.coordinates[0]}
+              onPositionChange={(lat, lng) => {
+                setData({ ...data, coordinates: [lng, lat] });
+              }}
+            />
+
+            {/* Google Map (Temporarily bypassed for MVP - kept for future use):
             {isLoaded ? (
               <div className="h-[300px] w-full rounded-lg overflow-hidden border border-gray-200">
                 <GoogleMap
@@ -358,6 +405,7 @@ export default function VendorDashboard() {
                 <Loader2 className="h-8 w-8 animate-spin text-gray-300" />
               </div>
             )}
+            */}
           </div>
         </div>
 

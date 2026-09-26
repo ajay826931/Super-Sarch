@@ -4,6 +4,8 @@ import dbConnect from '@/lib/mongodb';
 import Vendor from '@/models/Vendor';
 import cloudinary from '@/lib/cloudinary';
 
+import { verifyVendorToken } from '@/lib/jwt';
+
 // Verify authentication for upload API
 async function authenticateVendor() {
   const cookieStore = await cookies();
@@ -12,6 +14,11 @@ async function authenticateVendor() {
   
   await dbConnect();
   try {
+    const decoded = verifyVendorToken(token);
+    if (decoded && decoded.vendorId) {
+      const vendor = await Vendor.findById(decoded.vendorId);
+      return vendor;
+    }
     const vendor = await Vendor.findById(token);
     return vendor;
   } catch (err) {

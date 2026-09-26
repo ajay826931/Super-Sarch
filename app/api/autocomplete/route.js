@@ -14,7 +14,9 @@ export async function GET(request) {
     }
 
     await dbConnect();
-    const regex = new RegExp(query, 'i');
+    // Escape regex special characters
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escapedQuery, 'i');
     let results = [];
 
     if (type === 'location' || !type) {
@@ -28,6 +30,25 @@ export async function GET(request) {
         type: e.type,
         group: 'Location'
       })));
+
+      // Also search Location model
+      const locations = await (await import('@/models/Location')).default.find({
+        $or: [
+          { name: { $regex: regex } },
+          { aliases: { $regex: regex } }
+        ]
+      }).limit(5).lean();
+
+      locations.forEach(loc => {
+        if (!results.some(r => r.name.toLowerCase() === loc.name.toLowerCase())) {
+          results.push({
+            _id: loc._id,
+            name: loc.name,
+            type: 'Location',
+            group: 'Location'
+          });
+        }
+      });
     }
 
     if (type === 'property' || !type) {

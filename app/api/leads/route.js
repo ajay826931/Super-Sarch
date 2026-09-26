@@ -37,19 +37,23 @@ export async function POST(request) {
     // Google Sheets Webhook
     try {
       const property = await Property.findById(propertyId).select('property_name title');
-      const propertyName = property ? (property.property_name || property.title) : 'Unknown Property';
+      const propertyName = property ? (property.property_name || property.title || 'Unknown Property') : 'Unknown Property';
       const webhookUrl = process.env.GOOGLE_SHEET_WEBHOOK_URL;
       
       if (webhookUrl) {
+        const services_wanted = Array.isArray(servicesWanted) ? servicesWanted : (servicesWanted ? [servicesWanted] : []);
+        const student_location = studentLocation || '';
+
         await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          redirect: 'follow',
           body: JSON.stringify({
             Date: new Date().toISOString(),
             StudentName: studentName,
             WhatsAppNumber: whatsappNumber,
-            ServicesWanted: Array.isArray(servicesWanted) ? servicesWanted.join(', ') : '',
-            StudentLocation: studentLocation || '',
+            ServicesWanted: services_wanted.join(", "),
+            Location: student_location,
             PropertyName: propertyName,
             PropertyID: propertyId
           })
@@ -57,14 +61,14 @@ export async function POST(request) {
       }
     } catch (sheetError) {
       console.error('Google Sheet Webhook Error:', sheetError);
-      // Fails silently for the user
+      // Fails silently for the user so MongoDB lead creation still succeeds
     }
 
     return NextResponse.json({ success: true, leadId: lead._id });
   } catch (error) {
     console.error('Lead Submission Error:', error);
     return NextResponse.json(
-      { error: 'Internal Server Error' },
+      { error: error?.message || 'Internal Server Error' },
       { status: 500 }
     );
   }
