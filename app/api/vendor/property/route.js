@@ -37,38 +37,39 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    let property = await Property.findOne({ vendor_id: vendor._id }).select('property_name address location business_logo cover_photo thumbnail_url gallery_urls status');
+    let property = await Property.findOne({ vendor_id: vendor._id }).select('property_name address location business_logo cover_photo thumbnail_url gallery_urls status is_setup_completed');
     
-    // Auto-create for testing if it doesn't exist
+    // If no property exists yet for this newly registered vendor
     if (!property) {
-      property = await Property.create({
-        vendor_id: vendor._id,
-        property_name: "My New Property",
-        address: "Kota",
-        location: { type: 'Point', coordinates: [75.83, 25.18] }
+      return NextResponse.json({
+        success: true,
+        data: {
+          property: null,
+          services: [],
+          vendor: {
+            name: vendor.name,
+            phone: vendor.phone,
+            email: vendor.email,
+            unique_vendor_id: vendor.unique_vendor_id
+          }
+        }
       });
     }
 
     // Fetch all services belonging to this property
     let services = await Service.find({ property_id: property._id }).select('category pricing dynamic_attributes service_images');
-    
-    // Auto-create at least one service if none exist
-    if (services.length === 0) {
-      const newService = await Service.create({
-        property_id: property._id,
-        category: 'Hostel',
-        pricing: { starting_price: 5000, price_unit: 'month' },
-        dynamic_attributes: { amenities: ['AC', 'Wi-Fi'] },
-        service_images: []
-      });
-      services = [newService];
-    }
 
     return NextResponse.json({
       success: true,
       data: {
         property,
-        services
+        services,
+        vendor: {
+          name: vendor.name,
+          phone: vendor.phone,
+          email: vendor.email,
+          unique_vendor_id: vendor.unique_vendor_id
+        }
       }
     });
   } catch (error) {
@@ -87,12 +88,27 @@ export async function PATCH(request) {
     const updates = await request.json();
     console.log("PATCH /api/vendor/property Payload:", updates);
     
-    // Validate we have a property for this vendor
-    const property = await Property.findOne({ vendor_id: vendor._id });
+    // Validate or create property for this vendor
+    let property = await Property.findOne({ vendor_id: vendor._id });
     if (!property) {
-      return NextResponse.json({ error: 'Property not found' }, { status: 404 });
+      property = new Property({
+        vendor_id: vendor._id,
+        property_name: updates.property_name || 'My Hostel',
+        address: updates.address || 'Kota',
+        location: {
+          type: 'Point',
+          coordinates: (Array.isArray(updates.coordinates) && updates.coordinates.length === 2) 
+            ? updates.coordinates 
+            : [75.8323, 25.1815]
+        },
+        status: false,
+        is_setup_completed: true
+      });
     }
 
+    if (updates.is_setup_completed !== undefined) {
+      property.is_setup_completed = updates.is_setup_completed;
+    }
     if (updates.property_name !== undefined) {
       property.property_name = updates.property_name;
     }

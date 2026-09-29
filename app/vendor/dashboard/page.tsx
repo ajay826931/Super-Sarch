@@ -9,6 +9,7 @@ import { compressImage } from "@/lib/imageUtils";
 // Google Maps imports (Temporarily bypassed for MVP - kept for future use):
 // import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import dynamic from "next/dynamic";
+import VendorSetupWizard from "@/components/VendorSetupWizard";
 
 const LeafletMap = dynamic(() => import("@/components/LeafletMap"), {
   ssr: false,
@@ -46,6 +47,8 @@ export default function VendorDashboard() {
   const [uploadingServiceIdx, setUploadingServiceIdx] = useState<number | null>(null);
 
   const [data, setData] = useState<any>(null);
+  const [vendorInfo, setVendorInfo] = useState<any>(null);
+  const [needsSetup, setNeedsSetup] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -65,14 +68,24 @@ export default function VendorDashboard() {
       
       const json = await res.json();
       if (json.success) {
-        setData({
-          propertyName: json.data.property.property_name || "",
-          address: json.data.property.address || "",
-          coordinates: json.data.property.location?.coordinates || [75.8323, 25.1815],
-          businessLogo: json.data.property.business_logo || "",
-          coverPhoto: json.data.property.cover_photo || "",
-          services: json.data.services || [],
-        });
+        setVendorInfo(json.data.vendor);
+
+        // If no property exists yet or initial setup is not marked complete
+        if (!json.data.property || json.data.property.is_setup_completed === false) {
+          setNeedsSetup(true);
+          setData(null);
+        } else {
+          setNeedsSetup(false);
+          setData({
+            propertyName: json.data.property.property_name || "",
+            address: json.data.property.address || "",
+            coordinates: json.data.property.location?.coordinates || [75.8323, 25.1815],
+            businessLogo: json.data.property.business_logo || "",
+            coverPhoto: json.data.property.cover_photo || "",
+            status: json.data.property.status || false,
+            services: json.data.services || [],
+          });
+        }
       } else {
         setError(json.error || "Failed to load data");
       }
@@ -296,8 +309,6 @@ export default function VendorDashboard() {
     return <div className="flex h-64 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
-  if (!data) return <div>Failed to load your property data.</div>;
-
   const handleLogout = async () => {
     try {
       await fetch("/api/vendor/auth/logout", { method: "POST" });
@@ -306,6 +317,32 @@ export default function VendorDashboard() {
     }
     router.push("/vendor/login");
   };
+
+  // If vendor hasn't set up their property yet, show the setup wizard
+  if (needsSetup) {
+    return (
+      <div className="min-h-screen bg-slate-50 py-8 px-4">
+        <div className="max-w-3xl mx-auto flex justify-end mb-4">
+          <Button 
+            type="button" 
+            variant="outline" 
+            size="sm" 
+            onClick={handleLogout} 
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+          >
+            <LogOut className="h-4 w-4 mr-1.5" />
+            Logout
+          </Button>
+        </div>
+        <VendorSetupWizard 
+          vendorInfo={vendorInfo} 
+          onComplete={() => fetchData()} 
+        />
+      </div>
+    );
+  }
+
+  if (!data) return <div className="p-8 text-center text-gray-500">Failed to load your property data.</div>;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8 mb-20">
@@ -316,10 +353,17 @@ export default function VendorDashboard() {
         </div>
         
         <div className="flex items-center gap-3">
-          <div className="flex items-center bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
-            <ShieldCheck className="h-4 w-4 mr-1" />
-            KHM Verified
-          </div>
+          {data.status ? (
+            <div className="flex items-center bg-green-50 text-green-700 px-3 py-1 rounded-full text-sm font-semibold">
+              <ShieldCheck className="h-4 w-4 mr-1" />
+              KHM Live & Verified
+            </div>
+          ) : (
+            <div className="flex items-center bg-amber-50 text-amber-800 px-3 py-1 rounded-full text-xs font-semibold border border-amber-200">
+              <span className="h-2 w-2 rounded-full bg-amber-500 mr-1.5 animate-pulse"></span>
+              Under Verification (Unlisted)
+            </div>
+          )}
           <Button 
             type="button" 
             variant="outline" 

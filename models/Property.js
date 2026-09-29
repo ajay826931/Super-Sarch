@@ -16,7 +16,8 @@ const PropertySchema = new mongoose.Schema({
     type: [String],
     validate: [arrayLimit, '{PATH} exceeds the limit of 30']
   },
-  status: { type: Boolean }
+  status: { type: Boolean, default: false },
+  is_setup_completed: { type: Boolean, default: false }
 }, { timestamps: true });
 
 function arrayLimit(val) {
