@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Save, Building, ShieldCheck, UploadCloud, X, Image as ImageIcon, Plus, Edit2, Trash2, MapPin, LogOut } from "lucide-react";
+import { Loader2, Save, Building, ShieldCheck, UploadCloud, X, Image as ImageIcon, Plus, Edit2, Trash2, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { compressImage } from "@/lib/imageUtils";
 // Google Maps imports (Temporarily bypassed for MVP - kept for future use):
@@ -54,10 +54,6 @@ export default function VendorDashboard() {
 
   const [editingService, setEditingService] = useState<any>(null);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   const fetchData = async () => {
     try {
       const res = await fetch("/api/vendor/property");
@@ -89,12 +85,17 @@ export default function VendorDashboard() {
       } else {
         setError(json.error || "Failed to load data");
       }
-    } catch (err) {
+    } catch {
       setError("Error connecting to server");
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const uploadSingleImage = async (file: File) => {
     if (file.size > 5 * 1024 * 1024) {
@@ -162,8 +163,8 @@ export default function VendorDashboard() {
     setUploadingServiceIdx(serviceIndex);
     setError("");
     
-    let newImages = [...currentImages];
-    let failedUploads: string[] = [];
+    const newImages = [...currentImages];
+    const failedUploads: string[] = [];
 
     try {
       for (let i = 0; i < files.length; i++) {
@@ -171,7 +172,7 @@ export default function VendorDashboard() {
         try {
           const url = await uploadSingleImage(file);
           newImages.push(url);
-        } catch (err) {
+        } catch {
           failedUploads.push(file.name);
         }
       }
@@ -599,7 +600,7 @@ export default function VendorDashboard() {
             )})}
             {data.services.length === 0 && (
               <div className="col-span-full py-8 text-center text-gray-500 border-2 border-dashed rounded-xl">
-                No services added yet. Click "Add Service" to start.
+                No services added yet. Click &quot;Add Service&quot; to start.
               </div>
             )}
           </div>
@@ -707,7 +708,7 @@ export default function VendorDashboard() {
       {/* --- UNIFIED SAVE BUTTON --- */}
       <div className="pt-6 border-t mt-8 flex flex-col md:flex-row items-center justify-between">
         <p className="text-sm text-gray-500 mb-4 md:mb-0">
-          Make sure to click "Save Property Details" to apply any changes made to services or images.
+          Make sure to click &quot;Save Property Details&quot; to apply any changes made to services or images.
         </p>
         <Button onClick={handleSaveProperty} disabled={saving || editingService !== null} className="w-full md:w-auto h-12 px-8 text-base">
           {saving ? <Loader2 className="h-5 w-5 animate-spin mr-2" /> : <Save className="h-5 w-5 mr-2" />}

@@ -10,8 +10,7 @@ import {
   ShieldCheck, 
   Heart,
   Store,
-  Search,
-  ExternalLink
+  Search
 } from "lucide-react";
 
 export default function Footer() {
@@ -42,7 +41,7 @@ export default function Footer() {
             </Link>
 
             <p className="text-sm text-slate-400 leading-relaxed">
-              Kota's dedicated accommodation search platform. Helping students and parents find verified Hostels, PGs, and Messes near top coaching institutes with transparent pricing.
+              Kota&apos;s dedicated accommodation search platform. Helping students and parents find verified Hostels, PGs, and Messes near top coaching institutes with transparent pricing.
             </p>
 
             <div className="flex items-center gap-2 text-xs text-teal-400 bg-slate-800/80 px-3 py-1.5 rounded-lg w-fit border border-slate-700/60">

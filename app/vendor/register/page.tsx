@@ -300,7 +300,7 @@ export default function VendorRegisterPage() {
                 className="inline-flex items-center text-xs text-gray-500 hover:text-primary transition-colors font-medium"
               >
                 <RefreshCw className="h-3 w-3 mr-1" />
-                Didn't receive OTP? Resend
+                Didn&apos;t receive OTP? Resend
               </button>
             </div>
           </form>

@@ -261,7 +261,7 @@ export default function VendorLogin() {
                 className="inline-flex items-center text-xs text-gray-500 hover:text-primary transition-colors font-medium"
               >
                 <RefreshCw className="h-3 w-3 mr-1" />
-                Didn't receive OTP? Resend
+                Didn&apos;t receive OTP? Resend
               </button>
             </div>
           </form>
@@ -270,7 +270,7 @@ export default function VendorLogin() {
         {/* Register New Property / Business CTA */}
         <div className="mt-8 pt-6 border-t border-slate-100 text-center">
           <p className="text-xs text-slate-500 mb-3">
-            New to KHM? Don't have a Vendor Account yet?
+            New to KHM? Don&apos;t have a Vendor Account yet?
           </p>
           <Link href="/vendor/register" className="w-full block">
             <Button variant="outline" className="w-full h-11 border-dashed border-primary/40 text-primary hover:bg-primary/5 font-semibold text-sm rounded-xl">
