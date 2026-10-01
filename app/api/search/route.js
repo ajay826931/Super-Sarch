@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import Property from '@/models/Property';
-import Service from '@/models/Service'; // Import to ensure model registration
+import '@/models/Service'; // Ensure model registration for lookup
 import { getDistance } from '@/lib/distanceService';
 
 export async function POST(request) {

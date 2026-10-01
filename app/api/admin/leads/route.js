@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import Lead from '@/models/Lead';
-import User from '@/models/User'; // Ensure registered
-import Property from '@/models/Property'; // Ensure registered
-import Vendor from '@/models/Vendor'; // Ensure registered
+import '@/models/User'; // Ensure registered for populate
+import '@/models/Property'; // Ensure registered for populate
+import '@/models/Vendor'; // Ensure registered for populate
 
 export async function GET() {
   try {

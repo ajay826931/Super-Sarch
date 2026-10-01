@@ -25,7 +25,7 @@ async function getAuthenticatedVendor() {
     // 2. Fallback to raw MongoDB ObjectId for legacy sessions
     const vendor = await Vendor.findById(token);
     return vendor;
-  } catch (err) {
+  } catch {
     return null;
   }
 }

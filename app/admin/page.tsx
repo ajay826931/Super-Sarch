@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Users, Building, CheckCircle, Clock } from "lucide-react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function AdminDashboardPage() {

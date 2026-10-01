@@ -21,7 +21,7 @@ async function authenticateVendor() {
     }
     const vendor = await Vendor.findById(token);
     return vendor;
-  } catch (err) {
+  } catch {
     return null;
   }
 }
