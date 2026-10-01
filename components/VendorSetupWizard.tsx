@@ -10,7 +10,6 @@ import {
   IndianRupee, 
   Sparkles, 
   ArrowRight, 
-  CheckCircle2, 
   Loader2 
 } from "lucide-react";
 
@@ -81,7 +80,7 @@ export default function VendorSetupWizard({ vendorInfo, onComplete }: SetupWizar
       } else {
         setError(data.error || "Failed to save initial property setup.");
       }
-    } catch (err) {
+    } catch {
       setError("An error occurred while setting up your property.");
     } finally {
       setLoading(false);

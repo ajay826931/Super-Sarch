@@ -1,4 +1,4 @@
-import { Heart, BadgeCheck, MapPin } from "lucide-react";
+import { Heart, BadgeCheck } from "lucide-react";
 import Link from "next/link";
 
 interface PropertyProps {

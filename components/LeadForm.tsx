@@ -56,7 +56,7 @@ export default function LeadForm({ propertyId, availableServices }: LeadFormProp
       } else {
         alert("Something went wrong. Please try again.");
       }
-    } catch (err) {
+    } catch {
       alert("Error submitting request.");
     } finally {
       setLoading(false);
